@@ -12,13 +12,30 @@ import * as google from '@livekit/agents-plugin-google';
 import { BackgroundVoiceCancellation } from '@livekit/noise-cancellation-node';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
+import { PDFParse } from 'pdf-parse';
+import mammoth from 'mammoth'
 
 dotenv.config({ path: '.env.local' });
 
+interface CandidateData {
+  resume_url: string;
+  users: {
+    name: string;
+  }
+}
+
+interface RoomData {
+  room_title: string;
+  job_posting: string;
+  interview_type: string;
+  ai_instruction: string;
+  ideal_length: number;
+}
+
 class Assistant extends voice.Agent {
-  constructor() {
+  constructor(instructions?: string) {
     super({
-      instructions: `You are a helpful voice AI assistant. The user is interacting with you via voice, even if you perceive the conversation as text.
+      instructions: instructions ?? `You are a helpful voice AI assistant. The user is interacting with you via voice, even if you perceive the conversation as text.
       You eagerly assist users with their questions by providing information from your extensive knowledge.
       Your responses are concise, to the point, and without any complex formatting or punctuation including emojis, asterisks, or other symbols.
       You are curious, friendly, and have a sense of humor.`,
@@ -47,18 +64,89 @@ class Assistant extends voice.Agent {
   }
 }
 
+async function parseResume(url: string): Promise<string> {
+  try {
+    const response = await fetch(url);
+    if (!response.ok) {
+      console.error(`Failed to fetch resume from ${url}: ${response.statusText}`);
+      return '';
+    }
+    const buffer = Buffer.from(await response.arrayBuffer())
+    const contentType = response.headers.get('content-type') ?? ''
+    const pathname = new URL(url).pathname.toLowerCase()
+    const isPdf = pathname.endsWith('.pdf') || contentType.includes('pdf');
+    const isDocx =
+      pathname.endsWith('.docx') ||
+      contentType.includes('wordprocessingml.document') ||
+      contentType.includes('application/vnd.openxmlformats-officedocument.wordprocessingml.document');
+
+    if (isPdf) {
+      const data = await new PDFParse({ data: buffer })
+      const result = await data.getText();
+      console.log('Parsed PDF text:', result.text);
+      return result.text
+
+    } else if (isDocx) {
+      const { value } = await mammoth.extractRawText({ buffer });
+      console.log('Parsed DOCX text:', value);
+      return value
+
+    } else {
+      console.warn('Unsupported resume file type:', url);
+      return ''
+    }
+  } catch (error) {
+    console.error('Error parsing resume:', error);
+    return ''
+  }
+}
+
 export default defineAgent({
   prewarm: async (proc: JobProcess) => {
     proc.userData.vad = await silero.VAD.load();
   },
   entry: async (ctx: JobContext) => {
     // Set up a voice AI pipeline using OpenAI, Cartesia, AssemblyAI, and the LiveKit turn detector
+    let instructions = `You are a helpful voice AI assistant. The user is interacting with you via voice. Your responses are concise and to the point.`;
+    if (ctx.job.metadata) {
+      try {
+        const metadata = JSON.parse(ctx.job.metadata);
+        const roomData: RoomData = metadata.room;
+        const candidateData: CandidateData = metadata.candidate;
+        const resumeText = await parseResume(candidateData.resume_url);
+
+        instructions = `
+          You are an expert HR assistant named Prepple conducting an initial screening interview.
+          The candidate's name is ${candidateData.users.name}.
+          The interview is for a ${roomData.room_title} role.
+          The job posting is as follows: 
+
+          JOB POSTING:
+          ${roomData.job_posting}
+
+          CANDIDATE'S RESUME:
+          ${resumeText || 'No resume text available.'}
+
+          Your goal is to assess the candidate's suitability for this role based on their resume and the job description.
+          Ask questions related to their experience listed on the resume.
+          Keep your responses professional, concise, and friendly. 
+          Speak naturally as if in a voice conversation - avoid complex formatting, asterisks, or emojis.
+          The ideal length of this interview is approximately ${roomData.ideal_length} minutes.
+          Begin the interview by introducing yourself and asking the first question.
+        `
+
+        console.log('Job metadata processed for instructions.');
+      } catch (e) {
+        console.error('Error processing job metadata:', e);
+      }
+    }
+
     const session = new voice.AgentSession({
        llm: new google.beta.realtime.RealtimeModel({
           model: "gemini-2.0-flash-exp",
           voice: "Puck",
           temperature: 0.8,
-          instructions: "You are a helpful assistant",
+          instructions: instructions,
        }),
     });
 
@@ -89,7 +177,7 @@ export default defineAgent({
 
     // Start the session, which initializes the voice pipeline and warms up the models
     await session.start({
-      agent: new Assistant(),
+      agent: new Assistant(instructions),
       room: ctx.room,
       inputOptions: {
         // LiveKit Cloud enhanced noise cancellation
@@ -101,6 +189,12 @@ export default defineAgent({
 
     // Join the room and connect to the user
     await ctx.connect();
+
+    
+    const handle = session.generateReply({
+      instructions: 'Greet the user and offer your assistance. Introduce yourself as Prepple, the AI interview assistant.',
+    });
+    await handle.waitForPlayout();
   },
 });
 
