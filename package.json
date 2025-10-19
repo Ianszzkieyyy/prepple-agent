@@ -33,6 +33,7 @@
     "typescript-eslint": "^8.41.0"
   },
   "dependencies": {
+    "@google/genai": "^1.25.0",
     "@livekit/agents": "^1.0.10",
     "@livekit/agents-plugin-google": "~1.0.11",
     "@livekit/agents-plugin-livekit": "^1.0.10",
