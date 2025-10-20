@@ -9,7 +9,6 @@ import {
 } from '@livekit/agents';
 import * as silero from '@livekit/agents-plugin-silero';
 import * as google from '@livekit/agents-plugin-google';
-import { GoogleGenAI } from '@google/genai';
 import { BackgroundVoiceCancellation } from '@livekit/noise-cancellation-node';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'node:url';
@@ -34,16 +33,8 @@ interface RoomData {
   ideal_length: number;
 }
 
-interface TranscriptEntry {
-  speaker: 'agent' | 'candidate';
-  text: string;
-  timestamp: number;
-}
 
 class Assistant extends voice.Agent {
-  private transcript: TranscriptEntry[] = []
-  private startTime: number = Date.now();
-
   constructor(instructions?: string) {
     super({
       instructions: instructions ?? `You are a helpful voice AI assistant. The user is interacting with you via voice, even if you perceive the conversation as text.
@@ -76,21 +67,6 @@ class Assistant extends voice.Agent {
     });
   }
 
-  trackMessage(speaker: 'agent' | 'candidate', text: string) {
-    this.transcript.push({
-      speaker,
-      text,
-      timestamp: Date.now() - this.startTime,
-    });
-  }
-
-  getTranscript() {
-    return this.transcript
-  }
-
-  getInterviewDuration() {
-    return Math.floor((Date.now() - this.startTime) / 1000 / 60);
-  }
 }
 
 async function parseResume(url: string): Promise<string> {
@@ -127,144 +103,6 @@ async function parseResume(url: string): Promise<string> {
   } catch (error) {
     console.error('Error parsing resume:', error);
     return ''
-  }
-}
-
-const ai = new GoogleGenAI({ apiKey: process.env.GOOGLE_API_KEY! });
-
-async function generateFinalReport(
-  transcript: TranscriptEntry[],
-  roomData: RoomData,
-  candidateData: CandidateData,
-  resumeText: string,
-  duration: number,
-) {
-  try {
-    const transcriptText = transcript
-      .map((t) => `${t.speaker}: ${t.text}`)
-      .join('\n');
-    
-    const prompt = `You are an expert HR analyst evaluating an interview for Prepple AI, a platform that automates initial HR screening interviews.
-      JOB POSTING:
-      ${roomData.job_posting}
-
-      CANDIDATE NAME: ${candidateData.users.name}
-      POSITION: ${roomData.room_title}
-      INTERVIEW TYPE: ${roomData.interview_type}
-      INTERVIEW DURATION: ${duration} minutes
-      IDEAL DURATION: ${roomData.ideal_length} minutes
-
-      CANDIDATE'S RESUME:
-      ${resumeText || 'Resume not available'}
-
-      INTERVIEW TRANSCRIPT:
-      ${transcriptText}
-
-      Generate a comprehensive JSON report with the following structure:
-      {
-        "tone_analysis": {
-          "confidence_level": <0-100>,
-          "communication_clarity": <0-100>,
-          "enthusiasm": <0-100>,
-          "professionalism": <0-100>
-        },
-        "performance_summary": "<2-3 paragraph narrative evaluation covering key strengths, areas of concern, and fit for the role>",
-        "recommendation": "<one of: strongly_recommend, recommend, neutral, not_recommend>",
-        "interview_score": <0-100>,
-        "key_highlights": ["<highlight 1>", "<highlight 2>", "<highlight 3>"],
-        "areas_for_improvement": ["<area 1>", "<area 2>", "<area 3>"]
-      }
-
-      Evaluation Criteria:
-      - Relevance of candidate's responses to the job requirements
-      - Technical competency (especially for technical interviews)
-      - Communication skills and clarity
-      - Cultural fit indicators
-      - Professional demeanor and enthusiasm
-      - Time management (interview duration vs. ideal length)
-      - Alignment between resume experience and interview responses
-
-      Respond ONLY with valid JSON.`
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.0-flash-lite',
-      contents: prompt,
-      config: {
-        responseMimeType: 'application/json',
-        responseSchema: {
-          type: 'object',
-          properties: {
-            tone_analysis: {
-              type: 'object',
-              properties: {
-                confidence_level: {
-                  type: 'number',
-                  description: 'Candidate confidence level from 0-100'
-                },
-                communication_clarity: {
-                  type: 'number',
-                  description: 'Communication clarity score from 0-100'
-                },
-                enthusiasm: {
-                  type: 'number',
-                  description: 'Enthusiasm level from 0-100'
-                },
-                professionalism: {
-                  type: 'number',
-                  description: 'Professionalism score from 0-100'
-                }
-              },
-              required: ['confidence_level', 'communication_clarity', 'enthusiasm', 'professionalism']
-            },
-            performance_summary: {
-              type: 'string',
-              description: '2-3 paragraph narrative evaluation of candidate performance'
-            },
-            recommendation: {
-              type: 'string',
-              enum: ['strongly_recommend', 'recommend', 'neutral', 'not_recommend'],
-              description: 'HR hiring recommendation'
-            },
-            interview_score: {
-              type: 'number',
-              description: 'Overall interview score from 0-100'
-            },
-            key_highlights: {
-              type: 'array',
-              items: {
-                type: 'string'
-              },
-              description: 'Key positive highlights from the interview'
-            },
-            areas_for_improvement: {
-              type: 'array',
-              items: {
-                type: 'string'
-              },
-              description: 'Areas where candidate can improve'
-            }
-          },
-          required: [
-            'tone_analysis',
-            'performance_summary',
-            'recommendation',
-            'interview_score',
-            'key_highlights',
-            'areas_for_improvement'
-          ],
-        },
-        temperature: 0.7,
-        topP: 0.95,
-        topK: 40,
-        
-      }
-    })
-    const reportText = await response.text ?? ''
-    const reportData = JSON.parse(reportText)
-    return reportData
-  } catch (e) {
-    console.error('❌ Error generating final report:', e)
-    throw e
   }
 }
 
@@ -345,39 +183,10 @@ export default defineAgent({
       console.log(`Usage: ${JSON.stringify(summary)}`);
     };
 
-    // Generate final report on shutdown
-
-    const generateReport = async () => {
-      try {
-        const transcript = assistant.getTranscript();
-        const duration = assistant.getInterviewDuration();
-
-        if (transcript.length === 0) {
-          console.warn('No transcript data available for report generation.');
-          return;
-        }
-
-        const reportData = await generateFinalReport(
-          transcript,
-          roomData!,
-          candidateData!,
-          resumeText,
-          duration,
-        );
-
-        console.log('✅ Final report generated:', reportData);
-        console.log(`Score: ${reportData.interview_score} \nRecommendation: ${reportData.recommendation}`);
-
-      } catch (error) {
-        console.error('Error generating final report:', error);
-      }
-
-
-    }
 
     ctx.addShutdownCallback(async () => {
-      await generateReport()
-      await logUsage()
+      console.log(JSON.stringify(session.history.toJSON(), null, 2));
+      await logUsage();
     });
 
     // Start the session, which initializes the voice pipeline and warms up the models
