@@ -19,6 +19,7 @@ import mammoth from 'mammoth'
 dotenv.config({ path: '.env.local' });
 
 interface CandidateData {
+  id: string;
   resume_url: string;
   users: {
     name: string;
@@ -26,12 +27,14 @@ interface CandidateData {
 }
 
 interface RoomData {
+  id: string;
   room_title: string;
   job_posting: string;
   interview_type: string;
   ai_instruction: string;
   ideal_length: number;
 }
+
 
 
 class Assistant extends voice.Agent {
@@ -103,6 +106,42 @@ async function parseResume(url: string): Promise<string> {
   } catch (error) {
     console.error('Error parsing resume:', error);
     return ''
+  }
+}
+
+async function sendInterviewTranscript(
+  roomId: string,
+  candidateId: string,
+  sessionHistory: any,
+  usageMetrics: any,
+): Promise<void> {
+  try {
+    const apiUrl = process.env.NEXT_APP_API_URL || 'http://localhost:3000';
+
+    const response = await fetch(`${apiUrl}/api/interview-history`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': process.env.API_SECRET_KEY || '',
+      },
+      body: JSON.stringify({
+        roomId,
+        candidateId,
+        sessionHistory,
+        usageMetrics,
+        timestamp: new Date().toISOString(),
+      })
+    })
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
+      console.error('Failed to send interview history:', errorData);
+      throw new Error(`API responded with status ${response.status}`);
+    }
+
+    const result = await response.json();
+    console.log('Interview history sent successfully:', result);
+  } catch (error) {
+    console.error('Error sending interview transcript:', error);
   }
 }
 
@@ -185,7 +224,12 @@ export default defineAgent({
 
 
     ctx.addShutdownCallback(async () => {
-      console.log(JSON.stringify(session.history.toJSON(), null, 2));
+      await sendInterviewTranscript(
+        roomData.id,
+        candidateData.id,
+        session.history.toJSON(),
+        usageCollector.getSummary(),
+      )
       await logUsage();
     });
 
