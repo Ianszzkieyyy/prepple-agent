@@ -118,11 +118,11 @@ async function sendInterviewTranscript(
   try {
     const apiUrl = process.env.NEXT_APP_API_URL || 'http://localhost:3000';
 
-    const response = await fetch(`${apiUrl}/api/interview-history`, {
+    const response = await fetch(`${apiUrl}/api/interview-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'x-api-key': process.env.API_SECRET_KEY || '',
+        'x-api-key': process.env.AGENT_API_KEY || '',
       },
       body: JSON.stringify({
         roomId,
