@@ -112,6 +112,7 @@ async function parseResume(url: string): Promise<string> {
 async function sendInterviewTranscript(
   roomId: string,
   candidateId: string,
+  parsedResume: string,
   sessionHistory: any,
   usageMetrics: any,
 ): Promise<void> {
@@ -128,6 +129,7 @@ async function sendInterviewTranscript(
         roomId,
         candidateId,
         sessionHistory,
+        parsedResume,
         usageMetrics,
         timestamp: new Date().toISOString(),
       })
@@ -227,6 +229,7 @@ export default defineAgent({
       await sendInterviewTranscript(
         roomData.id,
         candidateData.id,
+        resumeText,
         session.history.toJSON(),
         usageCollector.getSummary(),
       )
