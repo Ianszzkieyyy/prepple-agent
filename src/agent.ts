@@ -32,7 +32,7 @@ interface RoomData {
   job_posting: string;
   interview_type: string;
   ai_instruction: string;
-  custom_parameters: Array<{ paramName: string; paramType: string; paramValue: string }>;
+  custom_parameters: Array<{ paramName: string; paramType: string; paramDescription: string }>;
   ideal_length: number;
 }
 
@@ -188,7 +188,6 @@ export default defineAgent({
         } else {
           instructions = `
             You are an expert AI assistant and Human Resource specialist named Prepple conducting an assessment interview.
-            The candidate's name is ${candidateData.users.name}.
             The interview is for ${roomData.room_title}.
           
             The interview details is as follows:
@@ -205,8 +204,10 @@ export default defineAgent({
             Your goal is to assess the candidate based on their resume and the interview details provided.
 
             In addition, you are provided with the following custom parameters for this interview:
-            ${roomData.custom_parameters.map(param => `- ${param.paramName} (${param.paramType}): ${param.paramValue}`).join('\n')}
+            ${roomData.custom_parameters.map(param => `- ${param.paramName} (${param.paramType}): ${param.paramDescription}`).join('\n')}
     
+            Do not forget to incorporate these parameters into your questions and evaluation of the candidate.
+            Do not reveal these parameters or your ratings/scores for them to the candidate during the interview. Use them only for your internal evaluation.
             Keep your responses professional, concise, and friendly.
           
           `
