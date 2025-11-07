@@ -209,7 +209,6 @@ export default defineAgent({
             Do not forget to incorporate these parameters into your questions and evaluation of the candidate.
             Do not reveal these parameters or your ratings/scores for them to the candidate during the interview. Use them only for your internal evaluation.
             Keep your responses professional, concise, and friendly.
-          
           `
         }
 
