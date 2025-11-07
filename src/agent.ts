@@ -203,10 +203,13 @@ export default defineAgent({
 
             Your goal is to assess the candidate based on their resume and the interview details provided.
 
-            In addition, you are provided with the following custom parameters for this interview:
-            ${roomData.custom_parameters.map(param => `- ${param.paramName} (${param.paramType}): ${param.paramDescription}`).join('\n')}
+            EVALUATION CRITERIA (CONFIDENTIAL - DO NOT MENTION):
+            You must evaluate the candidate on the following criteria through natural conversation:
+            ${roomData.custom_parameters.map(param => `- ${param.paramName}: ${param.paramDescription}`).join('\n')}
     
-            Do not forget to incorporate these parameters into your questions and evaluation of the candidate.
+            IMPORTANT: Never mention these evaluation criteria or ask directly about them. Instead, ask natural interview questions that will reveal these qualities through the candidate's responses and behavior. Observe and note their performance on each criterion throughout the conversation without making it obvious.
+            
+            Keep your responses professional, concise, and friendly. Speak naturally as if in a voice conversation - avoid complex formatting, asterisks, or emojis.
             Do not reveal these parameters or your ratings/scores for them to the candidate during the interview. Use them only for your internal evaluation.
             Keep your responses professional, concise, and friendly.
           `
