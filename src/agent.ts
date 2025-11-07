@@ -282,7 +282,7 @@ export default defineAgent({
 
     
     const handle = session.generateReply({
-      instructions: 'Greet the user and offer your assistance. Introduce yourself as Prepple, the AI interview assistant.',
+      instructions: 'Greet the user and offer your assistance. Introduce yourself as Prepple, the AI interview assistant. Do not begin asking questions yet. Just greet the candidate and wait for their response.',
     });
     await handle.waitForPlayout();
   },
