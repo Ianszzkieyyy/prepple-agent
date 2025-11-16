@@ -120,7 +120,7 @@ async function sendInterviewTranscript(
   try {
     const apiUrl = process.env.NEXT_APP_API_URL || 'http://localhost:3000';
 
-    const response = await fetch(`${apiUrl}/api/interview-result`, {
+    const response = await fetch(`${apiUrl}/interview-result`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
